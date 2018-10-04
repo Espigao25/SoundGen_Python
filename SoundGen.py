@@ -6,13 +6,17 @@
 	
 	# Issues with numpy module? On terminal: pip3 install --upgrade --ignore-installed --install-option '--install-data=/usr/local' numpy
 
-from pylab import *   	#Graphical capabilities, network and debug outfiles  
+import pylab 	#Graphical capabilities, network and debug outfiles  
 from rtlsdr import *	#SDR 
+from operator import sub
 import queue			#FIFO/queue
 import threading		#Multi-threading
 import datetime			#timestamps for the outfiles
 import os				#file management
+import numpy as np
+
 import array
+import math
 import sys
 import pdata			#demodulating library
 import time				#timestamps
@@ -70,7 +74,7 @@ signal_period = 1/signal_frequency
 samples_per_bit = sdr.sample_rate * signal_period		# How many times each bit of information will be sampled by the SDR kit as it arrives. Lower means faster code executing speeds, higher means lower error rate. Should never be lower than 2
 
 n = 2
-last_n_frames = zeros(frame_size * n)					# Important for plotting
+last_n_frames = pylab.zeros(frame_size * n)					# Important for plotting
 
 desired_result = [1,0,1,0,0,0,1,0,0,0,1,0,1,1]			# This is the sequence of bits that the program will interpret as a "Success"
 preamble = [1,0,1,0]									# This is the sequence of bits that the program will interpret as the start of a packet
@@ -141,7 +145,7 @@ def collectData(): 	#Collect samples
 	iteration_counter = 0	
 	t = time.time()
 	while iteration_counter < stop_at:
-		sample_buffer.put_nowait(abs(sdr.read_samples(frame_size))**2)  ## Harvests samples and stores their ABSOLUTE VALUES into a FIFO
+		sample_buffer.put_nowait((sdr.read_samples(frame_size))**2)  ## Harvests samples and stores their ABSOLUTE VALUES into a FIFO
 		iteration_counter += 1
 	print("\n###TERMINEI A RECOLHA DE AMOSTRAS EM " + str(round(time.time() -t, 3)) + ". TEMPO IDEAL = " +str(round((frame_size*stop_at)/sdr.sample_rate, 3)) + "###\n")
 	flag_end = True
@@ -192,8 +196,55 @@ if __name__ == "__main__":
 			if sample_buffer.empty() == False: # Are there any samples in the harvesting FIFO?
 				  
 				this_frame = sample_buffer.get_nowait()								
+				#print(this_frame)
+				#print(this_frame[1].real)
+				#print(this_frame[1].imag)
+				new_frame = np.angle(this_frame, deg=True)
 				
-				demod_signal = pdata.process_data(this_frame, samples_per_bit, frame_size) 	# O sinal cru é desmodulado (ASK) através das funções da biblioteca pdata
+				new_frame = (new_frame + 360) % 360
+				
+				#print(new_frame)
+				reference = []
+				ratio = (args['freq']/int(args['samp']))%1
+				print(ratio)
+				#print(range(len(this_frame)))
+				for x in range(len(this_frame)):
+
+					reference.append(360-((ratio * 360 * x)%360))
+				
+				true_frame = (new_frame + 180) % 360
+				
+				#for x in range(len(this_frame)):
+					#zzz = complex(math.cos(2 * math.pi * signal_frequency), math.sin(2*math.pi* signal_frequency))
+					#reference.append(zzz)
+					#reference_abs.append(abs(zzz))
+			
+				final_frame = list(map(sub, true_frame , reference))
+				
+				final_frame = (final_frame + 360) % 360
+				print(len(final_frame))
+				print(len(new_frame))
+				
+				#pylab.plot(reference)
+				pylab.plot(final_frame)
+				#pylab.plot(reference_angle)
+				pylab.show()
+				#print(new_frame)
+				#print(reference_angle)
+				
+				#for x in range(len(this_frame)):
+					#result = (this_frame[x].imag / this_frame[x].real)
+					#if result < 0:
+						#new_frame.append(1)
+					#if result > 0: 
+						#new_frame.append(2)
+					#print(new_frame[x])
+				#print(new_frame)
+				
+				
+					
+				
+				demod_signal = pdata.process_data(final_frame, samples_per_bit, frame_size) 	# O sinal cru é desmodulado (ASK) através das funções da biblioteca pdata
 				#print(demod_signal)
 				end_result.extend(demod_signal)												# O resultado obtido da desmodulação é anexado ao fim do array end_result
 				
@@ -230,7 +281,7 @@ if __name__ == "__main__":
 		if len(output_list) >= 5:
 			os.remove('./outputs/' + min(output_list))	#If there are 5 files or more in the outputs folder, delete the oldest file. Filenames are timestamps so its easy to find the oldest one.
 		
-		save('./outputs/' + str(datetime.datetime.now()), message_result)
+		pylab.save('./outputs/' + str(datetime.datetime.now()), message_result)
 		
 
 		
